@@ -1,6 +1,7 @@
 from config import Config
 from helper_ollama_http import get_ollama_model_names
 from llm_tools_manager import ToolManager
+from llm_tools_manager import SettingsCache
 
 from langchain_community.llms import Ollama
 
@@ -8,6 +9,7 @@ class ModelCache:
     def __init__(self, config: Config):
         self.model_cache = {}
         self.config = config
+        self.settings_cache = SettingsCache()
         self.model_server_url   = config.get_value_by_key('chat', 'model_server_url',
                                                           'http://localhost:11434')
         self.current_model_name = config.get_value_by_key('chat', 'model_name_default',
@@ -35,7 +37,7 @@ class ModelCache:
             model = Ollama(model=model_name, format='json',
                            temperature=self.current_model_temperature,
                            num_predict=self.current_model_num_predict)
-            tools = ToolManager(self.config)
+            tools = ToolManager(self.config, self.settings_cache)
 
             self.set_model(model_name, model, tools)
 

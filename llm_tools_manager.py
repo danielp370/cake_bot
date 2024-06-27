@@ -3,12 +3,25 @@
 from operator import itemgetter
 from langchain.tools.render import render_text_description
 
+class SettingsCache:
+    def __init__(self):
+        self.settings_cache = {}
+
+    def set(self, settings: dict):
+        self.settings_cache.update(settings)
+
+    def get(self, key: str, default=None):
+        return self.settings_cache.get(key, default)
+
+    def get_all(self):
+        return self.settings_cache
+
 class ToolManager:
-    def __init__(self, initial_config):
+    def __init__(self, initial_config=None, settings_cache=SettingsCache()):
         print(f"\n\n ** TOOL RESET ** \n\n")
         self.tools = {}
         self.config = initial_config
-        self.tool_settings_data = {}
+        self.settings_data = settings_cache
 
     def load_tools(self, tools):
         for tool_func in tools:
@@ -24,7 +37,7 @@ class ToolManager:
         return list(self.tools.values())
 
     def tool_chain(self, model_output):
-        default = self.get_tool_setting('default_tool')
+        default = self.settings_data.get('default_tool')
         chosen_tool_name = model_output.get('tool', default)
         print(f"Tool_chain {model_output} type {type(model_output)}")
         chosen_tool = self.get_tool(chosen_tool_name)
@@ -35,10 +48,10 @@ class ToolManager:
             raise ValueError(f"Tool {chosen_tool_name} not found.")
 
     def set_tool_settings(self, settings: dict):
-        self.tool_settings_data.update(settings)
+        self.settings_data.set(settings)
 
     def get_tool_setting(self, key: str):
-        return self.tool_settings_data.get(key, None)
+        return self.settings_data.get(key, None)
 
     def render_text_description(self):
         return render_text_description(self.get_tools())

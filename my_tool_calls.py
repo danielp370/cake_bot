@@ -1,6 +1,7 @@
 from langchain_core.tools import tool
 
 import subprocess
+import traceback
 from io import StringIO
 from contextlib import redirect_stdout
 
@@ -57,8 +58,8 @@ def python_exec_execute(code) -> ToolReturn:
             extras_dict[var] = locals()[var]
 
     # set the AI to run again so it can respond in english.
-    if extras_dict == {} and s == "":
-        auto_prompt_set(1)
+    #if s =="":
+    #    auto_prompt_set(1)
 
     return ToolReturn(s, extras_dict)
 
@@ -69,8 +70,9 @@ def execute_callback_return(execute_function, code, response):
         try:
             response = execute_function(code)
         except Exception as e:
-            response = f"Execution failed: {e}"
-            auto_prompt_set(1)
+            response = f"Execution Attempt failed, error: {e}"
+            print(traceback.format_exc())
+            auto_prompt_set(2)
 
     if chat_ai_callback:
         chat_ai_callback(response)
@@ -87,9 +89,10 @@ def exec_check(setting_key, execute_function, code):
     if present_exec_dialog == True:
         helper_unsafe_user_dialog(code, execute_function, execute_callback_return)
 
-        return "Waiting for you to allow or deny code execution."
+        return "Execution Attempt: Waiting for you to allow or deny code execution."
     else:
         return execute_function(code)
+
 
 # Exec tool flow with common intrastructure:
 # [python_exec|shell_exec] -> exec_check -> optional helper_unsafe_user_dialog ->
@@ -102,9 +105,36 @@ def python_exec(code: str) -> str:
     """Use this tool as a last resort. Run some generated Python code.
        It captures stdout and returns it as a str.
        Don't try to display objects such as figures, I will do that via a streamlit call.
-       Instead, return an object that I can render using streamlit's pyplot or image or write commands.
+
+       For python_exec, Streamlit write() is used for rendering objects placed in return_object.
+
+       Per streamlit write(), return_object supports the following in return_object:
+
+       write(string) : Prints the formatted Markdown string, with support for LaTeX expression,
+       emoji shortcodes, and colored text. See docs for st.markdown for more.
+       write(data_frame) : Displays the DataFrame as a table.
+       write(error) : Prints an exception specially.
+       write(func) : Displays information about a function.
+       write(module) : Displays information about the module.
+       write(class) : Displays information about a class.
+       write(dict) : Displays dict in an interactive widget.
+       write(mpl_fig) : Displays a Matplotlib figure.
+       write(generator) : Streams the output of a generator.
+       write(openai.Stream) : Streams the output of an OpenAI stream.
+       write(altair) : Displays an Altair chart.
+       write(PIL.Image) : Displays an image.
+       write(keras) : Displays a Keras model.
+       write(graphviz) : Displays a Graphviz graph.
+       write(plotly_fig) : Displays a Plotly figure.
+       write(bokeh_fig) : Displays a Bokeh figure.
+       write(sympy_expr) : Prints SymPy expression using LaTeX.
+       write(htmlable) : Prints _repr_html_() for the object if available.
+       write(obj) : Prints str(obj) if otherwise unknown.
+       for mathplotlib remember to return the fig.
+
        Put it in a local variable called return_object.
-       Remember to return non-text objects in return_object."""
+       Remember to return non-text objects in return_object.
+       """
 
     return exec_check('allow_python_exec', python_exec_execute, code)
 
@@ -119,7 +149,7 @@ def shell_exec(command: str) -> str:
 
 _tool_manager : ToolManager = None
 
-def my_tools_init(tm, model):
+def my_tools_init(tm, model_cache):
     global _tool_manager
     _tool_manager = tm
 

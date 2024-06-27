@@ -1,27 +1,27 @@
-from llm_tools_manager import ToolManager
+from llm_model_cache import ModelCache
 import streamlit as st
 
-def load_tool_options(tool_manager, keys):
+def load_options(model_cache, keys):
     for key in keys:
         if key[0] not in st.session_state:
-            value = tool_manager.config.get_boolean_by_key('my_tools', key[0], False)
+            value = model_cache.config.get_boolean_by_key('my_tools', key[0], False)
             st.session_state[key[0]] = value
-        tool_manager.set_tool_settings({key[0]: st.session_state[key[0]]})
+        model_cache.settings_cache.set({key[0]: st.session_state[key[0]]})
 
 
-def render_tool_options(tool_manager, st, st_settings_container, keys):
+def render_options(model_cache, st, st_settings_container, keys):
     # Expose options to streamlit settings
 
     def create_checkbox(key):
         def on_checkbox_change():
             value = st.session_state[key[0]]
             print(f"Checkbox '{key}' now {value}")
-            tool_manager.set_tool_settings({key[0]: value})
+            model_cache.settings_cache.set({key[0]: value})
 
         if key[0] not in st.session_state:
-            value = tool_manager.config.get_boolean_by_key('my_tools', key[0], False)
+            value = model_cache.config.get_boolean_by_key('my_tools', key[0], False)
             st.session_state[key[0]] = value
-        tool_manager.set_tool_settings({key[0]: st.session_state[key[0]]})
+        model_cache.settings_cache.set({key[0]: st.session_state[key[0]]})
         st_settings_container.checkbox(key[1], key=key[0], on_change=on_checkbox_change)
 
     for key in keys:
@@ -56,7 +56,7 @@ def auto_prompt_isset():
 
     st.session_state.auto_prompt_count = st.session_state.auto_prompt_count - 1
 
-    if st.session_state.auto_prompt_count <= 0:
+    if st.session_state.auto_prompt_count < 0 or st.session_state.auto_prompt == False:
         return False
     return True
 

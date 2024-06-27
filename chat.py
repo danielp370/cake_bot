@@ -14,7 +14,7 @@ from llm_tools_manager import ToolReturn
 from llm_model_cache import ModelCache
 from my_tool_calls import my_tools_init, my_tools_get_option_keys
 from helper_st_background import st_helper_set_background_img
-from helper_st_tool_options import render_tool_options, load_tool_options
+from helper_st_tool_options import render_options, load_options
 from helper_st_tool_options import auto_prompt_isset, auto_prompt_set
 from config import Config
 
@@ -70,18 +70,20 @@ def render_chat(st_chat_entry, st_chat, st_visuals):
     welcome_message = config.get_value_by_key('chat', 'initial_ai_welcome_prompt',
                                               "How can I help you?")
     if len(msgs.messages) == 0:
-        auto_prompt_set(1)
-        msgs.add_ai_message(welcome_message)
-    else:
-        auto_prompt_set(0, True)
+        if model_cache.settings_cache.get('auto_prompt_at_start', True):
+            auto_prompt_set(1, True)
+        else:
+            msgs.add_ai_message(welcome_message)
 
     # Render the chat history.
     # We add our tool calls to history so the AI can see them, but we strip them for our chat here.
-    display_tools_calls = config.get_boolean_by_key('chat_ui', 'display_tools_calls', False)
+    display_tools_calls = model_cache.settings_cache.get('display_tools_calls', False)
     for msg in msgs.messages:
-        print(f"MSG: {msg}\n")
+        print(f"MSG: {msg}")
+        if msg.content.strip().startswith("Execution Attempt") and not display_tools_calls:
+            continue
         # JSON Check if the message content begins with '{'
-        if not msg.content.strip().startswith('{') or display_tools_calls:
+        elif not msg.content.strip().startswith('{') or display_tools_calls:
             render_chat_ai_new_container(st_chat, st_visuals, msg.type)
             render_chat_msg(msg.type, msg.content, msg.additional_kwargs)
 
@@ -92,6 +94,8 @@ def render_chat(st_chat_entry, st_chat, st_visuals):
         # Display user input and save to message history.
         if input != None:
             st_chat.chat_message("user").write(input)
+        else:
+            input=""
         #msgs.add_user_message(input)
 
         # Invoke chain to get reponse.
@@ -114,7 +118,7 @@ def render_chat(st_chat_entry, st_chat, st_visuals):
                 break
             except Exception as e:
                 # Feed error back to user display, and into chat history so LLM see it.
-                error_str = f"Attempt {attempt +1} failed: {e}"
+                error_str = f"Execution Attempt {attempt +1} failed, error: {e}"
                 render_chat_ai_callback(error_str)
                 if attempt == 2:  # If the last attempt fails, raise the exception
                     st_chat.error("All attempts failed. Please try again later.")
@@ -129,19 +133,22 @@ def render_chat_ai_new_container(st_chat, st_visuals, msg_type):
 
     global st_chat_ai_chat_container
     global st_chat_ai_visuals_container
-    
-    st_chat_ai_chat_container = st_chat.chat_message(msg_type)
+
+    # disabled so we dont sit with a blank chat msg while waiting for a response
+    #st_chat_ai_chat_container = st_chat.chat_message(msg_type)
     st_chat_ai_visuals_container = st_visuals
 
     return st_chat_ai_chat_container
 
 
 def render_chat_msg(msg_type, content, additional_kwargs):
-    #ch_container = st.chat_message(msg_type)
-    ch_container = st_chat_ai_chat_container
     visuals_container = st_chat_ai_visuals_container
     
-    if content != None or content != "":
+    if content != None and content != "":
+        st_chat_ai_chat_container = st_chat.chat_message(msg_type)
+
+        ch_container = st_chat_ai_chat_container
+
         ch_container.write(content)
     if additional_kwargs != None:
         for key, value in additional_kwargs.items():
@@ -151,12 +158,12 @@ def render_chat_msg(msg_type, content, additional_kwargs):
 def render_chat_ai_private_note(response_str, additional_kwargs):
     """ Write the assistant a note about tools execution if it was (probably) successful but unknown to it."""
     global msgs
-    
+
+    response_str = str(response_str)
     if response_str.strip() == "" and len(additional_kwargs) != 0:
         msgs.add_message(AIMessage(content="{'private assistant note': tool executed successfully and return an object to user.'}"))
 
 def render_chat_ai_callback(response):
-    global st
     global msgs
 
     additional_kwargs: dict = {}
@@ -181,13 +188,17 @@ config = Config('resources/cake_tool_bot/config.ini')
 if 'model_cache' not in st.session_state:
     st.session_state.model_cache = ModelCache(config)
 model_cache: ModelCache = st.session_state.model_cache
-
-# Retrieve the model cache from the session state.
 model, tool_manager = model_cache.load_model(model_cache.current_model_name)
-load_tool_options(tool_manager, keys=my_tools_get_option_keys())
-my_tools_init(tool_manager, model)
-chain_with_history = chat_chain_load(model, tool_manager)
 
+load_options(model_cache, keys=my_tools_get_option_keys())
+chat_options = [('chat_objects_inline', 'Render objects in chat'),
+                ('auto_prompt_at_start', 'Automatic prompt at start'),
+                ('auto_prompt', 'Automatic prompting for follow up'),
+                ('display_tools_calls', 'Display calls'),]
+load_options(model_cache, keys=chat_options)
+my_tools_init(tool_manager, model_cache)
+
+chain_with_history = chat_chain_load(model, tool_manager)
 
 st.set_page_config(page_title = config.get_value_by_key('ui', 'page_title'),
                    page_icon  = config.get_value_by_key('ui', 'page_icon'),
@@ -204,11 +215,15 @@ session_id = render_session_id(st, st.sidebar)
 
 # Global message store for chat
 msgs = {}
-tool_manager.set_tool_settings({'chat_ai_callback': render_chat_ai_callback})
+model_cache.settings_cache.set({'chat_ai_callback': render_chat_ai_callback})
 
-st_col1, st_col2 = st.columns([2, 1])
+if model_cache.settings_cache.get('chat_objects_inline', False) == False:
+    st_chat, st_visuals = st.columns([2,1], vertical_alignment="bottom")
+else:
+    st_chat    = st.container()
+    st_visuals = st_chat
 
-render_chat(st, st_col1, st_col2)
+render_chat(st, st_chat, st_visuals)
 
 def on_model_change(key):
     model_cache.current_model_name = st.session_state[key]
@@ -227,4 +242,6 @@ def clear_cache():
 # Add the button to the sidebar
 if st.sidebar.button("Clear message cache"):
     clear_cache()
-render_tool_options(tool_manager, st, st.sidebar, keys=my_tools_get_option_keys())
+st_options_extra = st.sidebar.expander("Extra Options", expanded=True)
+render_options(model_cache, st, st_options_extra, keys=my_tools_get_option_keys())
+render_options(model_cache, st, st_options_extra, keys=chat_options)
