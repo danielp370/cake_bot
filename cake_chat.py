@@ -1,14 +1,12 @@
 import streamlit as st
+import uuid
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.prompts import MessagesPlaceholder
 from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.output_parsers import JsonOutputParser
-
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
-
-import uuid
 
 from llm_tools_manager import ToolReturn
 from llm_model_cache import ModelCache
@@ -211,7 +209,6 @@ st_helper_set_background_img(config.get_value_by_key('ui', 'page_background_imag
 st.title(config.get_value_by_key('chat_ui', 'window_name', "Chatbot with tools"))
 
 session_id = render_session_id(st, st.sidebar)
-
 
 # Global message store for chat
 msgs = {}

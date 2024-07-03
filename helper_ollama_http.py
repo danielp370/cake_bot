@@ -44,24 +44,3 @@ def get_ollama_model_names(server_url):
     if models is not None:
         return [model['name'] for model in models]
     return None
-
-# Example usage:
-server_url = "http://localhost:11434"  # Replace with the actual address of the Ollama server
-
-# Get detailed model information
-models = get_ollama_models(server_url)
-if models is not None:
-    print("List of models:")
-    for model in models:
-        print(f"Name: {model['name']}")
-        print(f"Model: {model['model']}")
-        print(f"Modified At: {model['modified_at']}")
-        print(f"Size: {model['size']}")
-        print(f"Digest: {model['digest']}")
-        print("Details:")
-        for key, value in model['details'].items():
-            print(f"  {key}: {value}")
-        print("\n")
-else:
-    print("Failed to retrieve models.")
-
